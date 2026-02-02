@@ -1,0 +1,7 @@
+{
+  "name": "AI Statement categorizer",
+  "description": "Automate your credit card statement categorization using Gemini AI. Upload statements, track spending by category, and the app learns your manual tags to simplify next month's tracking.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

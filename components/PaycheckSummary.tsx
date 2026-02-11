@@ -23,6 +23,9 @@ const PaycheckSummary: React.FC<PaycheckSummaryProps> = ({ paychecks }) => {
       acc.medicare += paycheck.medicare;
       acc.socialSecurity += paycheck.socialSecurity;
       acc.retirement401k += paycheck.preTaxDeductions['401k'];
+      acc.employer401kMatch += paycheck.preTaxDeductions.employer401kMatch;
+      acc.hsa += paycheck.preTaxDeductions.hsa;
+      acc.employerHsaMatch += paycheck.preTaxDeductions.employerHsaMatch;
       acc.healthInsurance += paycheck.preTaxDeductions.healthInsurance;
       acc.otherPreTax += paycheck.preTaxDeductions.other;
       acc.garnishments += paycheck.postTaxDeductions.garnishments;
@@ -38,6 +41,9 @@ const PaycheckSummary: React.FC<PaycheckSummaryProps> = ({ paychecks }) => {
       medicare: 0,
       socialSecurity: 0,
       retirement401k: 0,
+      employer401kMatch: 0,
+      hsa: 0,
+      employerHsaMatch: 0,
       healthInsurance: 0,
       otherPreTax: 0,
       garnishments: 0,
@@ -47,7 +53,7 @@ const PaycheckSummary: React.FC<PaycheckSummaryProps> = ({ paychecks }) => {
   );
 
   const totalTaxes = totals.federalTax + totals.stateTax + totals.localTax + totals.medicare + totals.socialSecurity;
-  const totalPreTax = totals.retirement401k + totals.healthInsurance + totals.otherPreTax;
+  const totalPreTax = totals.retirement401k + totals.employer401kMatch + totals.hsa + totals.employerHsaMatch + totals.healthInsurance + totals.otherPreTax;
   const totalPostTax = totals.garnishments + totals.otherPostTax;
   const totalDeductions = totalTaxes + totalPreTax + totalPostTax;
 
@@ -119,8 +125,20 @@ const PaycheckSummary: React.FC<PaycheckSummaryProps> = ({ paychecks }) => {
           <h4 className="text-md font-medium text-gray-900 mb-3">Deductions Breakdown</h4>
           <div className="space-y-2">
             <div className="flex justify-between">
-              <span className="text-sm text-gray-600">401k:</span>
+              <span className="text-sm text-gray-600">401k Employee:</span>
               <span className="text-sm font-medium">{formatCurrency(totals.retirement401k)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600">401k Employer Match:</span>
+              <span className="text-sm font-medium text-green-600">{formatCurrency(totals.employer401kMatch)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600">HSA Employee:</span>
+              <span className="text-sm font-medium">{formatCurrency(totals.hsa)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-600">HSA Employer Match:</span>
+              <span className="text-sm font-medium text-green-600">{formatCurrency(totals.employerHsaMatch)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-gray-600">Health Insurance:</span>

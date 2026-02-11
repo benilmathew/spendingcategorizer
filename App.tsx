@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Transaction, DEFAULT_CATEGORIES, CATEGORY_COLORS } from './types';
 import { processStatement } from './geminiService';
+import { finalizeTransactions, parseTransactionsFromCsv } from './statementLocal';
 import TransactionTable from './components/TransactionTable';
 import SpendingChart from './components/SpendingChart';
 import CategorySummary from './components/CategorySummary';
@@ -22,6 +23,8 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [userMappings, setUserMappings] = useState<Record<string, string>>({});
   const [searchTerm, setSearchTerm] = useState("");
+  const [showJsonImport, setShowJsonImport] = useState(false);
+  const [jsonImportText, setJsonImportText] = useState('');
   
   // Default to current year-month
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -65,6 +68,27 @@ const App: React.FC = () => {
     return transactions.filter(t => t.date.startsWith(selectedMonth));
   }, [transactions, selectedMonth]);
 
+  const hashFile = async (file: File): Promise<string> => {
+    const buf = await file.arrayBuffer();
+    const hash = await crypto.subtle.digest('SHA-256', buf);
+    return Array.from(new Uint8Array(hash))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  };
+
+  const readFileAsBase64 = async (file: File): Promise<string> => {
+    const result = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(String(e.target?.result || ''));
+      reader.onerror = () => reject(new Error(`Failed to read file: ${file.name}`));
+      reader.readAsDataURL(file);
+    });
+
+    const base64 = result.split(',')[1];
+    if (!base64) throw new Error('Invalid file encoding (base64 missing)');
+    return base64;
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -73,33 +97,103 @@ const App: React.FC = () => {
     setError(null);
 
     try {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const base64 = (e.target?.result as string).split(',')[1];
-        const newTransactions = await processStatement(base64, file.type, userMappings, selectedMonth);
-        
-        const filteredTransactions = newTransactions.filter(t => {
-          const isNotPayment = t.category !== "Payment/Credit";
-          const dateMatch = t.date.startsWith(selectedMonth);
-          return isNotPayment && dateMatch;
-        });
-        
-        if (newTransactions.length === 0) {
-          setError(`No transactions found in the statement. Please ensure it's a clear image or PDF.`);
-        } else if (filteredTransactions.length === 0 && newTransactions.length > 0) {
-          setError(`No valid transactions for ${formattedSelectedMonth} were found. Detected items were outside this month or payments.`);
+      const isCsv =
+        file.type === 'text/csv' ||
+        file.name.toLowerCase().endsWith('.csv') ||
+        file.type === 'application/vnd.ms-excel';
+
+      if (isCsv) {
+        const csvText = await file.text();
+        const raw = parseTransactionsFromCsv(csvText, selectedMonth);
+        const finalized = finalizeTransactions(raw, userMappings).filter(
+          (t) => t.category !== 'Payment/Credit' && t.date.startsWith(selectedMonth)
+        );
+
+        if (finalized.length === 0) {
+          setError(
+            `No valid transactions for ${formattedSelectedMonth} were found in that CSV. ` +
+              `Expected columns like "Date", "Description"/"Merchant", and "Amount" (or Debit/Credit).`
+          );
         } else {
-          setTransactions(prev => [...filteredTransactions, ...prev]);
+          setTransactions((prev) => [...finalized, ...prev]);
         }
+
         setIsProcessing(false);
-      };
-      reader.readAsDataURL(file);
+        event.target.value = '';
+        return;
+      }
+
+      const fileHash = await hashFile(file);
+      const cacheKey = `smartspend_ai_cache:v1:${selectedMonth}:${file.type}:${fileHash}`;
+      const cached = localStorage.getItem(cacheKey);
+
+      let rawFromAi: Array<{ date: string; merchant: string; amount: number; category?: string }> = [];
+
+      if (cached) {
+        rawFromAi = JSON.parse(cached);
+      } else {
+        const base64 = await readFileAsBase64(file);
+        const aiTransactions = await processStatement(base64, file.type, userMappings, selectedMonth);
+        rawFromAi = aiTransactions.map((t) => ({
+          date: t.date,
+          merchant: t.merchant,
+          amount: t.amount,
+          category: t.category
+        }));
+        localStorage.setItem(cacheKey, JSON.stringify(rawFromAi));
+      }
+
+      const finalized = finalizeTransactions(rawFromAi, userMappings).filter(
+        (t) => t.category !== 'Payment/Credit' && t.date.startsWith(selectedMonth)
+      );
+
+      if (rawFromAi.length === 0) {
+        setError(`No transactions found in the statement. Please ensure it's a clear image or PDF.`);
+      } else if (finalized.length === 0 && rawFromAi.length > 0) {
+        setError(`No valid transactions for ${formattedSelectedMonth} were found. Detected items were outside this month or payments.`);
+      } else {
+        setTransactions((prev) => [...finalized, ...prev]);
+      }
+
+      setIsProcessing(false);
     } catch (err) {
-      setError("Failed to process the statement. Please try again.");
+      setError(err instanceof Error ? err.message : "Failed to process the statement. Please try again.");
       setIsProcessing(false);
     }
     // Reset input
     event.target.value = '';
+  };
+
+  const handleJsonImport = () => {
+    try {
+      const importedData = JSON.parse(jsonImportText);
+      const items = Array.isArray(importedData) ? importedData : [importedData];
+
+      const raw = items
+        .map((d: any) => ({
+          date: String(d.date || d.transaction_date || d.posted_date || '').trim(),
+          merchant: String(d.merchant || d.description || d.name || '').trim(),
+          amount: Number(d.amount ?? 0),
+          category: d.category ? String(d.category) : undefined
+        }))
+        .filter((t) => !!t.date && !!t.merchant);
+
+      const finalized = finalizeTransactions(raw, userMappings).filter(
+        (t) => t.category !== 'Payment/Credit' && t.date.startsWith(selectedMonth)
+      );
+
+      if (finalized.length === 0) {
+        setError(`No valid transactions for ${formattedSelectedMonth} were found in that JSON.`);
+      } else {
+        setTransactions((prev) => [...finalized, ...prev]);
+        setError(null);
+      }
+
+      setShowJsonImport(false);
+      setJsonImportText('');
+    } catch (e) {
+      setError(`Invalid JSON format: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    }
   };
 
   const updateCategory = (id: string, newCategory: string) => {
@@ -212,12 +306,20 @@ const App: React.FC = () => {
             <input 
               type="file" 
               className="hidden" 
-              accept="image/*,application/pdf" 
+              accept="image/*,application/pdf,text/csv,.csv" 
               onChange={handleFileUpload}
               disabled={isProcessing}
             />
           </label>
-          
+
+          <button
+            onClick={() => setShowJsonImport(true)}
+            className="px-4 py-3 text-sm font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl shadow-sm hover:bg-gray-50"
+            type="button"
+          >
+            Import JSON
+          </button>
+           
           {monthTransactions.length > 0 && (
             <button 
               onClick={clearMonth}
@@ -324,6 +426,41 @@ const App: React.FC = () => {
           Local Storage Persistence • Multi-Month Tracker • Gemini AI Intelligence
         </p>
       </footer>
+
+      {/* JSON Import Modal */}
+      {showJsonImport && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Import Transactions from JSON</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Paste an array of items with <code>date</code>, <code>merchant</code>/<code>description</code>, and <code>amount</code>.
+              </p>
+              <textarea
+                value={jsonImportText}
+                onChange={(e) => setJsonImportText(e.target.value)}
+                placeholder='Paste JSON here... e.g. [{"date":"2026-01-15","merchant":"Amazon","amount":42.10}]'
+                className="w-full h-64 p-3 border border-gray-300 rounded-md font-mono text-sm"
+                spellCheck={false}
+              />
+              <div className="flex justify-end space-x-3 mt-4">
+                <button
+                  onClick={() => setShowJsonImport(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleJsonImport}
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md hover:bg-indigo-700"
+                >
+                  Import
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

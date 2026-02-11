@@ -80,7 +80,7 @@ const AppRouter: React.FC = () => {
               </div>
               <h3 className="text-2xl font-bold text-gray-900 mb-4">Income Calculator</h3>
               <p className="text-gray-600 mb-6">
-                Upload your pay statements from Workday or ADP to analyze your earnings,
+                Upload multiple pay statements from Workday or ADP to analyze your earnings,
                 taxes, and deductions. Get detailed breakdowns of your take-home pay.
               </p>
               <button

@@ -19,6 +19,9 @@ export interface PaycheckData {
   socialSecurity: number;
   preTaxDeductions: {
     '401k': number;
+    employer401kMatch: number;
+    hsa: number;
+    employerHsaMatch: number;
     healthInsurance: number;
     other: number;
   };

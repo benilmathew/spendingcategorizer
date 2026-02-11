@@ -45,8 +45,69 @@ node ocr_processor.js paycheck.pdf
 # Specify target month
 node ocr_processor.js paycheck.pdf 2026-01
 
+# Organize by month folder (recommended)
+node ocr_processor.js paycheck.pdf Jan
+node ocr_processor.js paycheck.pdf Feb
+
+# Batch process entire month folders
+node ocr_processor.js Jan  # Processes all files in Jan_Pay/
+node ocr_processor.js Feb  # Processes all files in Feb_Pay/
+
 # Full path
 node ocr_processor.js "C:\Users\Name\Documents\paycheck.pdf"
+```
+
+### Month Folder Organization
+
+When you specify a month (like "Jan", "Feb", etc.), the OCR processor will:
+
+1. Create a folder named `{Month}OCR` (e.g., `JanOCR`, `FebOCR`)
+2. Save JSON files in that folder with simplified names
+3. The web app will automatically detect the month when importing
+
+### Batch Processing Entire Folders
+
+You can process all pay statements for an entire month by organizing them in folders:
+
+1. **Organize your files:** Put all pay statements for a month in a `{Month}_Pay` folder
+   ```
+   Jan_Pay/
+   ├── paycheck1.pdf
+   ├── paycheck2.pdf
+   └── paycheck3.pdf
+   ```
+
+2. **Batch process the entire folder:**
+   ```bash
+   node ocr_processor.js Jan
+   ```
+
+3. **Results:** All JSON files will be saved in `JanOCR/` and automatically tagged for January
+
+**Complete workflow:**
+```bash
+# 1. Organize files by month
+mkdir Jan_Pay
+cp *.pdf Jan_Pay/
+
+# 2. Batch process entire month
+node ocr_processor.js Jan
+
+# 3. Import all results at once in web app
+# Files saved to: JanOCR/ocr_*.json
+```
+
+**Example:**
+```bash
+# Process January paychecks
+node ocr_processor.js "Jan_Pay/paycheck1.pdf" Jan
+node ocr_processor.js "Jan_Pay/paycheck2.pdf" Jan
+
+# This creates:
+# JanOCR/ocr_paycheck1.json
+# JanOCR/ocr_paycheck2.json
+
+# When you import these files in the web app, it will automatically set them to January 2026
 ```
 
 The script will:

@@ -46,6 +46,145 @@ const PaycheckCalculator: React.FC = () => {
     }
   }, []);
 
+  // Function to import OCR data from file
+  const importOCRData = () => {
+    // Create a hidden file input
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.multiple = true; // Allow multiple file selection
+    input.onchange = (e) => {
+      const files = (e.target as HTMLInputElement).files;
+      if (files && files.length > 0) {
+        let totalImported = 0;
+        let processedFiles = 0;
+        let detectedMonth: string | null = null;
+
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            try {
+              const importedData = JSON.parse(e.target?.result as string);
+
+              // Detect month from folder name (e.g., "JanOCR/ocr_file.json" -> "Jan")
+              const filePath = file.webkitRelativePath || file.name;
+              const monthMatch = filePath.match(/^([A-Za-z]+)OCR\//);
+              if (monthMatch && !detectedMonth) {
+                const monthName = monthMatch[1];
+                // Convert month name to YYYY-MM format
+                const monthMap: { [key: string]: string } = {
+                  'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
+                  'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+                };
+                const monthNum = monthMap[monthName];
+                if (monthNum) {
+                  const currentYear = new Date().getFullYear();
+                  detectedMonth = `${currentYear}-${monthNum}`;
+                }
+              }
+
+              processOCRData(importedData, detectedMonth);
+              totalImported += Array.isArray(importedData) ? importedData.length : 1;
+            } catch (error) {
+              setError(`❌ Failed to parse ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            } finally {
+              processedFiles++;
+              if (processedFiles === files.length && totalImported > 0) {
+                let successMessage = `✅ Successfully imported ${totalImported} paycheck(s) from ${files.length} OCR file(s)!`;
+                if (detectedMonth) {
+                  successMessage += ` Auto-detected month: ${detectedMonth}`;
+                }
+                setError(successMessage);
+                setTimeout(() => setError(null), 3000);
+              }
+            }
+          };
+          reader.readAsText(file);
+        }
+      }
+    };
+    input.click();
+  };
+
+  // Function to process OCR data
+  const processOCRData = (importedData: any, detectedMonth?: string) => {
+    const paychecksToAdd = Array.isArray(importedData) ? importedData : [importedData];
+
+    // Convert imported data to PaycheckData format
+    const formattedPaychecks: PaycheckData[] = paychecksToAdd.map((data: any, index: number) => ({
+      id: `ocr-imported-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${index}`,
+      payPeriod: data.pay_period || data.payPeriod || "",
+      grossAmount: Number(data.gross_amount || data.grossAmount) || 0,
+      federalTax: Number(data.federal_tax_amount || data.federalTax) || 0,
+      stateTax: Number(data.state_tax_amount || data.stateTax) || 0,
+      localTax: Number(data.local_tax_amount || data.localTax) || 0,
+      medicare: (() => {
+        const fsaAmount = Number(data.employee_fsa_contribution || data.fsa_contribution || data.preTaxDeductions?.fsa) || 0;
+        const medicareAmount = Number(data.medicare_amount || data.medicare) || 0;
+        // If FSA captured the medicare amount, don't double-count it
+        return fsaAmount > 0 ? 0 : medicareAmount;
+      })(),
+      socialSecurity: Number(data.social_security_amount || data.socialSecurity) || 0,
+      preTaxDeductions: {
+        '401k': Number(data.employee_401k_contribution || data.preTaxDeductions?.['401k']) || 0,
+        employer401kMatch: Number(data.employer_401k_match || data.preTaxDeductions?.employer401kMatch) || 0,
+        hsa: Number(data.employee_hsa_contribution || data.hsa_contribution || data.preTaxDeductions?.hsa) || 0,
+        employerHsaMatch: Number(data.employer_hsa_match || data.preTaxDeductions?.employerHsaMatch) || 0,
+        fsa: Number(data.employee_fsa_contribution || data.fsa_contribution || data.preTaxDeductions?.fsa) || 0,
+        employerFsaMatch: Number(data.employer_fsa_match || data.preTaxDeductions?.employerFsaMatch) || 0,
+        healthInsurance: Number(data.health_insurance || data.preTaxDeductions?.healthInsurance) || 0,
+        other: Number(data.other_pre_tax_deductions || data.preTaxDeductions?.other || data.dental_insurance || data.vision_insurance) || 0,
+      },
+      postTaxDeductions: {
+        garnishments: Number(data.garnishments || data.postTaxDeductions?.garnishments) || 0,
+        other: Number(data.other_post_tax_deductions || data.postTaxDeductions?.other) || 0,
+      },
+      netAmount: Number(data.net_amount || data.netAmount) || 0,
+      payDate: detectedMonth ? `${detectedMonth}-01` : (data.pay_date || data.payDate || ""),
+      source: 'OCR' as const,
+    }));
+
+    setPaychecks(prev => [...formattedPaychecks, ...prev]);
+    // Success message is now handled in importOCRData function
+  };
+
+  // Migrate existing paychecks to include HSA fields
+  useEffect(() => {
+    if (paychecks.length > 0) {
+      const needsMigration = paychecks.some(paycheck => 
+        !paycheck.preTaxDeductions.hasOwnProperty('hsa') || 
+        !paycheck.preTaxDeductions.hasOwnProperty('employerHsaMatch') ||
+        !paycheck.preTaxDeductions.hasOwnProperty('fsa') ||
+        !paycheck.preTaxDeductions.hasOwnProperty('employerFsaMatch') ||
+        (paycheck.preTaxDeductions.fsa > 0 && paycheck.medicare > 0) // Double-counting issue
+      );
+
+      if (needsMigration) {
+        const migratedPaychecks = paychecks.map(paycheck => {
+          const fsa = paycheck.preTaxDeductions.fsa || 0;
+          const medicare = paycheck.medicare || 0;
+          
+          return {
+            ...paycheck,
+            medicare: fsa > 0 ? 0 : medicare, // If FSA has value, medicare should be 0
+            preTaxDeductions: {
+              '401k': paycheck.preTaxDeductions['401k'] || 0,
+              employer401kMatch: paycheck.preTaxDeductions.employer401kMatch || 0,
+              hsa: paycheck.preTaxDeductions.hsa || 0,
+              employerHsaMatch: paycheck.preTaxDeductions.employerHsaMatch || 0,
+              fsa: paycheck.preTaxDeductions.fsa || 0,
+              employerFsaMatch: paycheck.preTaxDeductions.employerFsaMatch || 0,
+              healthInsurance: paycheck.preTaxDeductions.healthInsurance || 0,
+              other: paycheck.preTaxDeductions.other || 0,
+            }
+          };
+        });
+        setPaychecks(migratedPaychecks);
+      }
+    }
+  }, [paychecks.length > 0 ? paychecks[0]?.id : null]); // Only run when paychecks change
+
   // Save paychecks on change
   useEffect(() => {
     localStorage.setItem('paycheck_calculator_data', JSON.stringify(paychecks));
@@ -66,21 +205,28 @@ const PaycheckCalculator: React.FC = () => {
 
       // Convert imported data to PaycheckData format
       const formattedPaychecks: PaycheckData[] = paychecksToAdd.map((data: any, index: number) => ({
-        id: `imported-${Date.now()}-${index}`,
+        id: `imported-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${index}`,
         payPeriod: data.pay_period || data.payPeriod || "",
         grossAmount: Number(data.gross_amount || data.grossAmount) || 0,
         federalTax: Number(data.federal_tax_amount || data.federalTax) || 0,
         stateTax: Number(data.state_tax_amount || data.stateTax) || 0,
         localTax: Number(data.local_tax_amount || data.localTax) || 0,
-        medicare: Number(data.medicare_amount || data.medicare) || 0,
+        medicare: (() => {
+          const fsaAmount = Number(data.employee_fsa_contribution || data.fsa_contribution || data.preTaxDeductions?.fsa) || 0;
+          const medicareAmount = Number(data.medicare_amount || data.medicare) || 0;
+          // If FSA captured the medicare amount, don't double-count it
+          return fsaAmount > 0 ? 0 : medicareAmount;
+        })(),
         socialSecurity: Number(data.social_security_amount || data.socialSecurity) || 0,
         preTaxDeductions: {
           '401k': Number(data.employee_401k_contribution || data.preTaxDeductions?.['401k']) || 0,
           employer401kMatch: Number(data.employer_401k_match || data.preTaxDeductions?.employer401kMatch) || 0,
-          hsa: Number(data.hsa_contribution || data.preTaxDeductions?.hsa) || 0,
+          hsa: Number(data.employee_hsa_contribution || data.hsa_contribution || data.preTaxDeductions?.hsa) || 0,
           employerHsaMatch: Number(data.employer_hsa_match || data.preTaxDeductions?.employerHsaMatch) || 0,
+          fsa: Number(data.employee_fsa_contribution || data.fsa_contribution || data.preTaxDeductions?.fsa) || 0,
+          employerFsaMatch: Number(data.employer_fsa_match || data.preTaxDeductions?.employerFsaMatch) || 0,
           healthInsurance: Number(data.health_insurance || data.preTaxDeductions?.healthInsurance) || 0,
-          other: Number(data.other_pre_tax_deductions || data.preTaxDeductions?.other) || 0,
+          other: Number(data.other_pre_tax_deductions || data.preTaxDeductions?.other || data.dental_insurance || data.vision_insurance) || 0,
         },
         postTaxDeductions: {
           garnishments: Number(data.garnishments || data.postTaxDeductions?.garnishments) || 0,
@@ -279,6 +425,14 @@ const PaycheckCalculator: React.FC = () => {
                 disabled={isProcessing}
               >
                 📄 Import JSON
+              </button>
+
+              <button
+                onClick={importOCRData}
+                className="flex items-center px-4 py-2 border border-green-300 text-sm font-medium rounded-md text-green-700 bg-green-50 hover:bg-green-100"
+                disabled={isProcessing}
+              >
+                🤖 Import OCR Files
               </button>
 
               {paychecks.length > 0 && (

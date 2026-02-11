@@ -38,3 +38,14 @@ Desktop.ini
 # Temporary files
 *.tmp
 *.temp
+
+# Paystub data and OCR results
+JanOCR/
+Jan_Pay/
+ocr_auto_import.json
+
+# Python cache
+__pycache__/
+
+.Jan_Pay/*
+.JanOCR/*

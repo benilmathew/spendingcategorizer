@@ -64,7 +64,7 @@ const PaycheckTable: React.FC<PaycheckTableProps> = ({ paychecks }) => {
         <tbody className="bg-white divide-y divide-gray-200">
           {paychecks.map((paycheck) => {
             const totalTaxes = paycheck.federalTax + paycheck.stateTax + paycheck.localTax + paycheck.medicare + paycheck.socialSecurity;
-            const totalPreTax = paycheck.preTaxDeductions['401k'] + paycheck.preTaxDeductions.employer401kMatch + paycheck.preTaxDeductions.hsa + paycheck.preTaxDeductions.employerHsaMatch + paycheck.preTaxDeductions.healthInsurance + paycheck.preTaxDeductions.other;
+            const totalPreTax = paycheck.preTaxDeductions['401k'] + paycheck.preTaxDeductions.employer401kMatch + paycheck.preTaxDeductions.hsa + paycheck.preTaxDeductions.employerHsaMatch + paycheck.preTaxDeductions.fsa + paycheck.preTaxDeductions.employerFsaMatch + paycheck.preTaxDeductions.healthInsurance + paycheck.preTaxDeductions.other;
             const totalPostTax = paycheck.postTaxDeductions.garnishments + paycheck.postTaxDeductions.other;
 
             return (

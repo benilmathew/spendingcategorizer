@@ -22,6 +22,8 @@ export interface PaycheckData {
     employer401kMatch: number;
     hsa: number;
     employerHsaMatch: number;
+    fsa: number;
+    employerFsaMatch: number;
     healthInsurance: number;
     other: number;
   };
@@ -31,7 +33,7 @@ export interface PaycheckData {
   };
   netAmount: number;
   payDate: string;
-  source: 'Workday' | 'ADP' | 'Other';
+  source: 'Workday' | 'ADP' | 'OCR' | 'Other';
 }
 
 export interface PaycheckSummary {

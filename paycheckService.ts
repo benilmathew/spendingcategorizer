@@ -77,6 +77,8 @@ export async function processPaycheck(
       "social_security_amount": 76.54,
       "employee_401k_contribution": 200.00,
       "employer_401k_match": 50.00,
+      "employee_hsa_contribution": 150.00,
+      "employer_hsa_match": 25.00,
       "health_insurance": 100.00,
       "other_pre_tax_deductions": 0,
       "garnishments": 0,
@@ -154,6 +156,8 @@ export async function processPaycheck(
         preTaxDeductions: {
           '401k': Number(paycheck.pre_tax_deductions?.['employee_401k_contribution'] || paycheck.pre_tax_deductions?.['401k_contribution'] || paycheck.pre_tax_deductions?.['employee_401k'] || paycheck.pre_tax_deductions?.['401k'] || paycheck.preTaxDeductions?.['401k'] || paycheck['employee_401k_contribution'] || paycheck['401k_contribution'] || paycheck['employee_401k'] || paycheck['401k']) || 0,
           employer401kMatch: Number(paycheck.pre_tax_deductions?.['employer_401k_match'] || paycheck.pre_tax_deductions?.['401k_match'] || paycheck.pre_tax_deductions?.['employer_match'] || paycheck.preTaxDeductions?.employer401kMatch || paycheck['employer_401k_match'] || paycheck['401k_match'] || paycheck['employer_match']) || 0,
+          hsa: Number(paycheck.pre_tax_deductions?.['hsa_contribution'] || paycheck.pre_tax_deductions?.['hsa'] || paycheck.pre_tax_deductions?.['employee_hsa'] || paycheck.preTaxDeductions?.hsa || paycheck['hsa_contribution'] || paycheck['hsa']) || 0,
+          employerHsaMatch: Number(paycheck.pre_tax_deductions?.['employer_hsa_match'] || paycheck.pre_tax_deductions?.['hsa_match'] || paycheck.pre_tax_deductions?.['employer_hsa_match'] || paycheck.preTaxDeductions?.employerHsaMatch || paycheck['employer_hsa_match'] || paycheck['hsa_match']) || 0,
           healthInsurance: Number(paycheck.pre_tax_deductions?.health_insurance || paycheck.pre_tax_deductions?.healthInsurance || paycheck.preTaxDeductions?.healthInsurance || paycheck.health_insurance || paycheck.healthInsurance) || 0,
           other: Number(paycheck.pre_tax_deductions?.other_pre_tax_deductions || paycheck.pre_tax_deductions?.other || paycheck.preTaxDeductions?.other || paycheck.other_pre_tax_deductions || paycheck.other) || 0,
         },

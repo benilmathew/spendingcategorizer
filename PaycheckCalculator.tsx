@@ -46,6 +46,34 @@ const PaycheckCalculator: React.FC = () => {
     }
   }, []);
 
+  // Auto-select the month with the most paychecks
+  useEffect(() => {
+    if (paychecks.length > 0) {
+      const monthCounts: { [key: string]: number } = {};
+      paychecks.forEach(paycheck => {
+        if (paycheck.payDate) {
+          const month = paycheck.payDate.substring(0, 7); // YYYY-MM format
+          monthCounts[month] = (monthCounts[month] || 0) + 1;
+        }
+      });
+      
+      // Find the month with the most paychecks
+      let bestMonth = selectedMonth;
+      let maxCount = monthCounts[selectedMonth] || 0;
+      
+      for (const [month, count] of Object.entries(monthCounts)) {
+        if (count > maxCount || (count === maxCount && month > bestMonth)) { // Prefer later months if tie
+          maxCount = count;
+          bestMonth = month;
+        }
+      }
+      
+      if (bestMonth !== selectedMonth && maxCount > 0) {
+        setSelectedMonth(bestMonth);
+      }
+    }
+  }, [paychecks]); // Remove selectedMonth from dependencies to avoid loops
+
   // Function to import OCR data from file
   const importOCRData = () => {
     // Create a hidden file input
@@ -119,12 +147,7 @@ const PaycheckCalculator: React.FC = () => {
       federalTax: Number(data.federal_tax_amount || data.federalTax) || 0,
       stateTax: Number(data.state_tax_amount || data.stateTax) || 0,
       localTax: Number(data.local_tax_amount || data.localTax) || 0,
-      medicare: (() => {
-        const fsaAmount = Number(data.employee_fsa_contribution || data.fsa_contribution || data.preTaxDeductions?.fsa) || 0;
-        const medicareAmount = Number(data.medicare_amount || data.medicare) || 0;
-        // If FSA captured the medicare amount, don't double-count it
-        return fsaAmount > 0 ? 0 : medicareAmount;
-      })(),
+      medicare: Number(data.medicare_amount || data.medicare) || 0,
       socialSecurity: Number(data.social_security_amount || data.socialSecurity) || 0,
       preTaxDeductions: {
         '401k': Number(data.employee_401k_contribution || data.preTaxDeductions?.['401k']) || 0,
@@ -141,7 +164,7 @@ const PaycheckCalculator: React.FC = () => {
         other: Number(data.other_post_tax_deductions || data.postTaxDeductions?.other) || 0,
       },
       netAmount: Number(data.net_amount || data.netAmount) || 0,
-      payDate: detectedMonth ? `${detectedMonth}-01` : (data.pay_date || data.payDate || ""),
+      payDate: data.pay_date || data.payDate || (detectedMonth ? `${detectedMonth}-01` : ""),
       source: 'OCR' as const,
     }));
 
@@ -167,7 +190,8 @@ const PaycheckCalculator: React.FC = () => {
           
           return {
             ...paycheck,
-            medicare: fsa > 0 ? 0 : medicare, // If FSA has value, medicare should be 0
+            // Medicare and FSA are separate deductions - both should be included
+            medicare: medicare,
             preTaxDeductions: {
               '401k': paycheck.preTaxDeductions['401k'] || 0,
               employer401kMatch: paycheck.preTaxDeductions.employer401kMatch || 0,
@@ -211,12 +235,7 @@ const PaycheckCalculator: React.FC = () => {
         federalTax: Number(data.federal_tax_amount || data.federalTax) || 0,
         stateTax: Number(data.state_tax_amount || data.stateTax) || 0,
         localTax: Number(data.local_tax_amount || data.localTax) || 0,
-        medicare: (() => {
-          const fsaAmount = Number(data.employee_fsa_contribution || data.fsa_contribution || data.preTaxDeductions?.fsa) || 0;
-          const medicareAmount = Number(data.medicare_amount || data.medicare) || 0;
-          // If FSA captured the medicare amount, don't double-count it
-          return fsaAmount > 0 ? 0 : medicareAmount;
-        })(),
+        medicare: Number(data.medicare_amount || data.medicare) || 0,
         socialSecurity: Number(data.social_security_amount || data.socialSecurity) || 0,
         preTaxDeductions: {
           '401k': Number(data.employee_401k_contribution || data.preTaxDeductions?.['401k']) || 0,
@@ -490,21 +509,35 @@ const PaycheckCalculator: React.FC = () => {
         {/* Summary */}
         <PaycheckSummary paychecks={monthPaychecks} />
 
-        {/* All Paychecks Summary (if different from month view) */}
+        {/* Multi-month info */}
         {paychecks.length > monthPaychecks.length && (
-          <div className="mt-6">
-            <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4">
-              <div className="flex">
-                <div className="ml-3">
-                  <p className="text-sm text-yellow-800">
-                    <strong>All Paychecks Total:</strong> You have {paychecks.length} paychecks total, but only {monthPaychecks.length} are shown for {formattedSelectedMonth}.
-                    Total 401k across all paychecks: ${paychecks.reduce((sum, p) => sum + p.preTaxDeductions['401k'], 0).toFixed(2)}
-                  </p>
+          <div className="mt-4 bg-blue-50 border border-blue-200 rounded-md p-4">
+            <div className="flex">
+              <div className="ml-3">
+                <p className="text-sm text-blue-800">
+                  <strong>Multiple Months:</strong> You have paychecks from {new Set(paychecks.map(p => p.payDate?.substring(0, 7))).size} different months. 
+                  Currently showing {monthPaychecks.length} paychecks for {formattedSelectedMonth}. 
+                  Total across all months: ${paychecks.reduce((sum, p) => sum + p.preTaxDeductions['401k'], 0).toFixed(2)} in 401k contributions.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {Array.from(new Set(paychecks.map(p => p.payDate?.substring(0, 7)).filter(Boolean)))
+                    .sort()
+                    .map(month => (
+                      <button
+                        key={month}
+                        onClick={() => setSelectedMonth(month!)}
+                        className={`px-3 py-1 text-xs rounded-md ${
+                          month === selectedMonth
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                        }`}
+                      >
+                        {new Date(month! + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                        ({paychecks.filter(p => p.payDate?.startsWith(month!)).length})
+                      </button>
+                    ))}
                 </div>
               </div>
-            </div>
-            <div className="mt-4">
-              <PaycheckSummary paychecks={paychecks} />
             </div>
           </div>
         )}

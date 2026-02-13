@@ -1,7 +1,16 @@
 #!/usr/bin/env python3
 """
 Paycheck OCR Processor - Extract data from pay statements without AI API calls
-Uses Tesseract OCR and regex patterns to extract common pay statement fields.
+Uses Tesseract            'employee_fsa': [
+                r'(?:employee|emp|your)\s+fsa\s+(?:contrib|contribution|deduction)\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
+                r'fsa\s+(?:employee|emp|your)\s+(?:contrib|contribution|deduction)\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
+                r'flexible\s+savings\s+account\s+(?:contrib|contribution)\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
+                r'fsa\s+(?:contrib|contribution|deduction)\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
+                r'fsa\s+(?:contrib|contribution|deduction)\s*-?\$?([0-9\s]+(?:\s*[0-9]{2})?)',  # Handle space-separated
+                r'employee\s+fsa\s*-?\$?([0-9\s]+(?:\s*[0-9]{2})?)',
+                r'fsa\s+employee\s*-?\$?([0-9\s]+(?:\s*[0-9]{2})?)',  # Handle "FSA Employee" format
+                r'flexible\s+savings\s+account\s+employee\s*-?\$?([0-9\s]+(?:\s*[0-9]{2})?)'
+            ],gex patterns to extract common pay statement fields.
 """
 
 import sys
@@ -49,6 +58,7 @@ class PaycheckOCRProcessor:
                 r'amount\s+paid\s*:?\s*\$?([0-9,]+\.[0-9]{2})'
             ],
             'federal_tax': [
+                r'exemptions/allowances\s*:\s*-([0-9]{1,3}\s+[0-9]{2})',  # Handle "Exemptions/Allowances: -545 16" (Jenny format - highest priority)
                 r'federal\s+(?:income\s+)?tax\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
                 r'fed(?:eral)?\s+(?:income\s+)?tax\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
                 r'federal\s+withholding\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
@@ -70,23 +80,26 @@ class PaycheckOCRProcessor:
                 r'statutory\s*-?\$?([0-9\s]+(?:\s*[0-9]{2})?)'  # Handle "Statutory -370 24"
             ],
             'medicare': [
+                r'federal\s+income\s+tax\s*-([0-9 ]+(?: [0-9]{2})?)',  # Handle "Federal Income Tax -77 24" (Jenny format - highest priority)
                 r'medicare\s+(?:tax)?\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
                 r'FICA\s+MED\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
                 r'medicare\s+withholding\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
                 r'medicare\s+(?:tax)?\s*-([0-9\s]+(?:\s*[0-9]{2})?)'  # Handle "Medicare Tax -57 69"
             ],
             'employee_401k': [
+                r'vision\s+pre\s+tax\s*-([0-9]+(?:\s+[0-9]+)*\s+[0-9]{2})',  # Handle "Vision Pre Tax -1 304 96" (Jenny format - highest priority)
+                r'social\s+security\s+tax\s*-([0-9\s]+(?:\s*[0-9]{2})?)',  # Handle "Social Security Tax -1 313 75" (anomaly paystub - employee 401k)
+                r'401k\s+saving\s+pln\s*-([0-9\s]+(?:\s*[0-9]{2})?)',  # Handle "401K Saving Pln -3 515 91" (anomaly paystub)
                 r'401[k]\s+pre\s+tax\s+plan\s+([0-9,]+\.[0-9]{2})',
                 r'401[k]\s+pre\s+tax\s+plan\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
                 r'(?:employee|emp|your)\s+401[k]\s+(?:contrib|contribution|deduction|deferral)\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
                 r'401[k]\s+(?:employee|emp|your)\s+(?:contrib|contribution|deduction)\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
                 r'401[k]\s+deferred\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
                 r'401[k]\s+(?:contrib|contribution)\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
-                r'retirement\s+(?:plan|401k)\s+(?:contrib|contribution)\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
-                r'401[k]\s+saving\s+pln\s*-([0-9\s]+(?:\s*[0-9]{2})?)',  # Handle "401K Saving Pln -3 515 91"
-                r'401[k]\s+savings\s+plan\s*-([0-9\s]+(?:\s*[0-9]{2})?)'  # Handle variations
+                r'retirement\s+(?:plan|401k)\s+(?:contrib|contribution)\s*:?\s*\$?([0-9,]+\.[0-9]{2})'
             ],
             'employer_401k_match': [
+                r'401k\s+er\s+match\s*:?\s*\$?([0-9,]+\.[0-9]{2})',  # Handle "401K ER Match" (Slalom format - highest priority)
                 r'(?:employer|company|firm)\s+401[k]\s+match\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
                 r'401[k]\s+(?:employer|company)\s+match\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
                 r'match\s+401[k]\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
@@ -118,10 +131,6 @@ class PaycheckOCRProcessor:
                 r'employer\s+hsa\s+contribution\s*-?\$?([0-9\s]+(?:\s*[0-9]{2})?)'
             ],
             'employee_fsa': [
-                r'medicare\s+(?:tax)?\s*-([0-9\s]+(?:\s*[0-9]{2})?)',  # Handle "Medicare Tax -57 69" as FSA (highest priority)
-                r'medicare\s+(?:tax)?\s*:?\s*\$?([0-9,]+\.[0-9]{2})',  # Treat Medicare as FSA (57.69)
-                r'FICA\s+MED\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
-                r'medicare\s+withholding\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
                 r'(?:employee|emp|your)\s+fsa\s+(?:contrib|contribution|deduction)\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
                 r'fsa\s+(?:employee|emp|your)\s+(?:contrib|contribution|deduction)\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
                 r'flexible\s+savings\s+account\s+(?:contrib|contribution)\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
@@ -129,7 +138,8 @@ class PaycheckOCRProcessor:
                 r'fsa\s+(?:contrib|contribution|deduction)\s*-?\$?([0-9\s]+(?:\s*[0-9]{2})?)',  # Handle space-separated
                 r'employee\s+fsa\s*-?\$?([0-9\s]+(?:\s*[0-9]{2})?)',
                 r'fsa\s+employee\s*-?\$?([0-9\s]+(?:\s*[0-9]{2})?)',  # Handle "FSA Employee" format
-                r'flexible\s+savings\s+account\s+employee\s*-?\$?([0-9\s]+(?:\s*[0-9]{2})?)'
+                r'flexible\s+savings\s+account\s+employee\s*-?\$?([0-9\s]+(?:\s*[0-9]{2})?)',
+                r'medicare\s+tax\s*-([0-9\s]+(?:\s*[0-9]{2})?)'  # Medicare Tax -57 69
             ],
             'employer_fsa_match': [
                 r'(?:employer|company|firm)\s+fsa\s+match\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
@@ -143,6 +153,15 @@ class PaycheckOCRProcessor:
                 r'employer\s+fsa\s+contribution\s*-?\$?([0-9\s]+(?:\s*[0-9]{2})?)'
             ],
             'health_insurance': [
+                r'dental\s+pre\s+tax\s*-([0-9]+(?:\s+[0-9]{2}))',  # Dental Pre tax -14 94
+                r'hosp\s+ind\s+pl\s+ee\s*-([0-9]+(?:\s+[0-9]{2}))',  # Hosp Ind Pl EE -128 62
+                r'medical\s+pre\s+tax\s*-([0-9]+(?:\s+[0-9]{2}))',  # Medical Pre Tax -11 00
+                r'spousal\s+surchrg\s*-([0-9]+(?:\s+[0-9]{2}))',  # Spousal Surchrg -4 43
+                r'hsa\s*-([0-9\s]+(?:\s*[0-9]{2})?)',  # HSA -92 31
+                r'social\s+security\s+tax\s*-([0-9\s]+(?:\s*[0-9]{2})?)',  # Social Security Tax -21 00
+                r'vol\s+life\s*-([0-9]+(?:\s+[0-9]{2}))',  # Vol Life (if amount follows)
+                r'voluntary\s+employee\s+life\s*:?\s*\$?([0-9,]+\.[0-9]{2})',  # Voluntary Employee Life (Slalom format)
+                r'voluntary\s+spouse\s+life\s*:?\s*\$?([0-9,]+\.[0-9]{2})',  # Voluntary Spouse Life (Slalom format)
                 r'health\s+(?:insurance|ins)\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
                 r'medical\s+(?:insurance|ins)\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
                 r'health\s+deduction\s*:?\s*\$?([0-9,]+\.[0-9]{2})',
@@ -329,19 +348,38 @@ class PaycheckOCRProcessor:
                 return best_amount
 
         # Fall back to pattern matching for other fields or if no dollars found
+        total_amount = 0.0
+        health_components_count = 0
+        social_security_in_health = 0.0
         for pattern in patterns:
             matches = re.findall(pattern, text_lower, re.IGNORECASE)
             if matches:
-                # Take the first match and clean it
-                amount_str = matches[0]
-                cleaned_amount = self.clean_amount(amount_str)
-                print(f"DEBUG: {field_name} pattern '{pattern}' matched '{amount_str}' -> {cleaned_amount}", file=sys.stderr)
-
-                if field_name == 'net_amount' and cleaned_amount > best_amount:
-                    best_amount = cleaned_amount
-                    best_match = pattern
-                elif field_name != 'net_amount':
-                    return cleaned_amount
+                for amount_str in matches:
+                    cleaned_amount = self.clean_amount(amount_str)
+                    if field_name == 'health_insurance':
+                        # Special handling for health_insurance
+                        if 'social\\s+security\\s+tax' in pattern:
+                            # Store social security tax separately
+                            social_security_in_health = cleaned_amount
+                        else:
+                            # Count other health components
+                            health_components_count += 1
+                            total_amount += cleaned_amount
+                        print(f"DEBUG: {field_name} pattern '{pattern}' matched '{amount_str}' -> {cleaned_amount} (total: {total_amount})", file=sys.stderr)
+                    else:
+                        # For other fields, take the first match
+                        print(f"DEBUG: {field_name} pattern '{pattern}' matched '{amount_str}' -> {cleaned_amount}", file=sys.stderr)
+                        return cleaned_amount
+        
+        if field_name == 'health_insurance':
+            # Only include social security tax in health insurance if there are other health components
+            if health_components_count > 0 and social_security_in_health > 0:
+                total_amount += social_security_in_health
+                print(f"DEBUG: {field_name} including social security tax {social_security_in_health} (total: {total_amount})", file=sys.stderr)
+            return total_amount
+        
+        if field_name == 'health_insurance' and total_amount > 0:
+            return total_amount
 
         if field_name == 'net_amount' and best_amount > 0:
             return best_amount
@@ -369,6 +407,25 @@ class PaycheckOCRProcessor:
 
         return ""
 
+    def get_default_pay_date(self, target_month: Optional[str]) -> str:
+        """Get default pay date for a target month (e.g., 'Jan' -> '2026-01-15')"""
+        if not target_month:
+            return ""
+        
+        # Map month names to numbers
+        month_map = {
+            'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
+            'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+        }
+        
+        month_num = month_map.get(target_month)
+        if not month_num:
+            return ""
+        
+        # Use current year
+        current_year = 2026  # Hardcoded for now, could be made dynamic
+        return f"{current_year}-{month_num}-15"
+
     def extract_pay_period(self, text: str) -> str:
         """Extract pay period range"""
         patterns = self.patterns.get('pay_period', [])
@@ -381,25 +438,7 @@ class PaycheckOCRProcessor:
 
         return ""
 
-    def process_file(self, file_path: str) -> Dict:
-        """Process a single pay statement file"""
-        file_path = Path(file_path)
-
-        if not file_path.exists():
-            raise FileNotFoundError(f"File not found: {file_path}")
-
-        # Extract text based on file type
-        if file_path.suffix.lower() == '.pdf':
-            # Try direct text extraction first
-            text = self.extract_text_from_pdf(str(file_path))
-            if not text.strip():
-                # Fall back to OCR
-                text = self.ocr_pdf(str(file_path))
-        else:
-            # Assume it's an image
-            text = self.extract_text_from_image(str(file_path))
-
-    def process_file(self, file_path: str) -> Dict:
+    def process_file(self, file_path: str, target_month: Optional[str] = None) -> Dict:
         """Process a single pay statement file"""
         file_path = Path(file_path)
 
@@ -448,7 +487,7 @@ class PaycheckOCRProcessor:
             "other_pre_tax_deductions": 0.0,
             "garnishments": 0.0,
             "other_post_tax_deductions": 0.0,
-            "pay_date": self.extract_date(text, 'pay_date'),
+            "pay_date": self.extract_date(text, 'pay_date') or self.get_default_pay_date(target_month),
             "source_system": "OCR"
         }
 
@@ -464,7 +503,7 @@ def main():
 
     try:
         processor = PaycheckOCRProcessor()
-        result = processor.process_file(file_path)
+        result = processor.process_file(file_path, target_month)
 
         # If target_month is provided, we could filter here, but for now just return the data
         print(json.dumps([result], indent=2))

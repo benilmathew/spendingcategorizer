@@ -82,7 +82,7 @@ async function processMonthFolder(monthName) {
     console.log(`📁 Created output folder: ${outputFolder}`);
   }
 
-  const targetMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+  const targetMonth = monthName; // Pass the month name directly to the Python script
   let processedCount = 0;
   let successCount = 0;
 

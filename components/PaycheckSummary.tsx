@@ -137,24 +137,16 @@ const PaycheckSummary: React.FC<PaycheckSummaryProps> = ({ paychecks }) => {
               <span className="text-sm font-medium text-green-600">{formatCurrency(totals.employer401kMatch)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-sm text-gray-600">HSA Employee:</span>
-              <span className="text-sm font-medium">{formatCurrency(totals.hsa)}</span>
+              <span className="text-sm text-gray-600">HSA:</span>
+              <span className="text-sm font-medium">{formatCurrency(totals.hsa + totals.employerHsaMatch)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-sm text-gray-600">HSA Employer Match:</span>
-              <span className="text-sm font-medium text-green-600">{formatCurrency(totals.employerHsaMatch)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">FSA Employee:</span>
-              <span className="text-sm font-medium">{formatCurrency(totals.fsa)}</span>
+              <span className="text-sm text-gray-600">Health Insurance:</span>
+              <span className="text-sm font-medium">{formatCurrency(totals.healthInsurance + totals.fsa)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-gray-600">FSA Employer Match:</span>
               <span className="text-sm font-medium text-green-600">{formatCurrency(totals.employerFsaMatch)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Health Insurance:</span>
-              <span className="text-sm font-medium">{formatCurrency(totals.healthInsurance)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-gray-600">Other Pre-Tax:</span>
